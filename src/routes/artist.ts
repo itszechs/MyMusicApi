@@ -22,3 +22,38 @@ artistRouter.get("", async (req: Request, res: Response) => {
         res.status(500).json({error: "Internal Server Error"});
     }
 });
+
+
+artistRouter.get("/:artistId", async (req: Request, res: Response) => {
+    try {
+        const albumArtistId = req.params.artistId;
+        const routeQuery = [
+            {$match: {album_artist_id: albumArtistId}},
+            {$unwind: "$albums"},
+            {$sort: {"albums.album_name": 1}},
+            {
+                $group: {
+                    _id: "$album_artist_id",
+                    artist_name: {$first: "$artist_name"},
+                    artist_id: {$first: "$album_artist_id"},
+                    albums: {
+                        $push: {
+                            album_name: "$albums.album_name",
+                            release_group_id: "$albums.release_group_id",
+                            album_art: "$albums.album_art"
+                        }
+                    }
+                }
+            }
+        ];
+
+        const artist = await collections.music!.aggregate(routeQuery).toArray();
+        if (artist) {
+            res.json(artist[0]);
+        } else {
+            res.status(404).json({error: "Artist not found"});
+        }
+    } catch (error) {
+        res.status(500).json({error: "Internal Server Error"});
+    }
+});
