@@ -2,6 +2,7 @@ import dotenv from 'dotenv'
 import express, {NextFunction, Request, Response} from "express";
 import {connectToDatabase} from "./services/database";
 import {artistRouter} from "./routes/artist";
+import {albumRouter} from "./routes/album";
 
 // Load environment variables from the .env file, where the ATLAS_URI is configured
 dotenv.config();
@@ -30,6 +31,8 @@ connectToDatabase(ATLAS_URI)
 
         // Artists route
         app.use("/api/v1/artists", artistRouter);
+        // Albums route
+        app.use("/api/v1/albums", albumRouter);
 
         // Invalid route message
         app.use((_req: Request, res: Response, _next: NextFunction) => {
