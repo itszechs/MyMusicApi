@@ -50,3 +50,19 @@ songRouter.get("", async (req: Request, res: Response) => {
         res.status(500).json({error: "Internal Server Error"});
     }
 });
+
+songRouter.get("/:recordingId", async (req: Request, res: Response) => {
+    try {
+        const recordingId = req.params.recordingId;
+        const routeQuery = [...query];
+        routeQuery.push({$match: {recording_id: recordingId,},});
+        const song = await collections.music!.aggregate(routeQuery).toArray() as Song[];
+        if (song.length > 0) {
+            res.json(song[0]);
+        } else {
+            res.status(404).json({error: "Song not found"});
+        }
+    } catch (error) {
+        res.status(500).json({error: "Internal Server Error"});
+    }
+});
