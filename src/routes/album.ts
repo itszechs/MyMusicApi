@@ -8,11 +8,34 @@ albumRouter.use(express.json());
 
 albumRouter.get("", async (req: Request, res: Response) => {
     try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+
+        const albumsCount = await collections.albums!.countDocuments();
+        const totalPages = Math.ceil(albumsCount / limit);
+
+        if (page < 1 || page > totalPages) {
+            return res.json({ totalPage: totalPages, page, results: [] });
+        }
+
+        const skip = (page - 1) * limit;
+
         let albums = await collections.albums!
             .aggregate([
                 { $project: { albumArt: 0, _id: 0 } },
-            ]).toArray();
-        res.json(albums.sort((a: Album, b: Album) => a.albumName.localeCompare(b.albumName)));
+                { $sort: { albumName: 1 } },
+                { $skip: skip },
+                { $limit: limit },
+            ], { collation: { locale: "en" } })
+            .toArray();
+
+        const response = {
+            totalPage: totalPages,
+            page,
+            results: albums,
+        };
+
+        res.json(response);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Internal Server Error" });
@@ -55,7 +78,6 @@ albumRouter.get("/:albumId", async (req: Request, res: Response) => {
                 $project: { "tracks.albumName": 0 }
             }
         ]).toArray();
-
 
         if (!album || album.length === 0) {
             res.status(404).json({ error: "Album not found" });
