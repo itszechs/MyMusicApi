@@ -1,15 +1,21 @@
-import {Collection, MongoClient} from "mongodb";
-import {MusicEntry} from "../models/music-entry";
+import { Collection, MongoClient } from "mongodb";
+import { Artist } from "../models/artist";
+import { Album } from "../models/album";
+import { Track } from "../models/track";
 
 export const collections: {
-    music?: Collection<MusicEntry>;
+    artists?: Collection<Artist>
+    albums?: Collection<Album>;
+    tracks?: Collection<Track>;
 } = {};
 
 export async function connectToDatabase(uri: string) {
     const client = new MongoClient(uri);
     await client.connect();
 
-    const db = client.db("MusicApp");
+    const db = client.db("Music");
 
-    collections.music = db.collection<MusicEntry>("music");
+    collections.artists = db.collection<Artist>("artists");
+    collections.albums = db.collection<Album>("albums");
+    collections.tracks = db.collection<Track>("tracks");
 }

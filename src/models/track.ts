@@ -1,10 +1,15 @@
 export interface Track {
-    track_number: number
-    title: string
-    recording_id: string
-    fileId: string
-    fileMimeType: string
-    fileName: string
-    fileSize: string
-    ownerEmail: string
+    artistId: string,
+    artistName: string,
+    albumId: string,
+    albumName: string,
+    trackName: string,
+    trackNumber: number,
+    discNumber: number,
+    duration: number,
+    sampleRate: number,
+    fileExtension: string,
+    recordingId: string,
+    fileId: string,
+    fileSize: number
 }

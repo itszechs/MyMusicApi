@@ -1,80 +1,120 @@
-import express, {Request, Response, Router,} from "express";
-import {collections} from "../services/database";
-import {Track} from "../models/track";
+import express, { Request, Response, Router, } from "express";
+import { collections } from "../services/database";
+import { Album } from "../models/album";
+import sharp from "sharp";
 
 export const albumRouter = Router();
 albumRouter.use(express.json());
 
-interface SongAlbum {
-    album_artist_id: string
-    artist_name: string
-    album_art: string
-    album_name: string
-    release_group_id: string
-    tracks: Track[]
-}
-
 albumRouter.get("", async (req: Request, res: Response) => {
     try {
-        const routeQuery = [
-            {$unwind: "$albums"},
-            {
-                $project: {
-                    _id: 0,
-                    album_artist_id: 1,
-                    artist_name: 1,
-                    album_art: "$albums.album_art",
-                    album_name: "$albums.album_name",
-                    release_group_id: "$albums.release_group_id"
-                },
-            },
-        ];
-        const albums = await collections.music!.aggregate(routeQuery).toArray() as SongAlbum[];
-        res.json(albums.sort((a, b) => a.album_name.localeCompare(b.album_name)));
+        let albums = await collections.albums!
+            .aggregate([
+                { $project: { albumArt: 0, _id: 0 } },
+            ]).toArray();
+        res.json(albums.sort((a: Album, b: Album) => a.albumName.localeCompare(b.albumName)));
     } catch (error) {
         console.error(error);
-        res.status(500).json({error: "Internal Server Error"});
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
 
 
-albumRouter.get("/:releaseGroupId", async (req: Request, res: Response) => {
+albumRouter.get("/:albumId", async (req: Request, res: Response) => {
     try {
-        const releaseGroupId = req.params.releaseGroupId;
-        const query = [
-            {$unwind: "$albums"},
-            {$match: {"albums.release_group_id": releaseGroupId,},},
+        const albumId = req.params.albumId;
+        const album = await collections.albums!.aggregate([
+            { $match: { albumId: albumId } },
+            { $project: { albumArt: 0 } },
             {
-                $project: {
-                    _id: 0,
-                    album_artist_id: 1,
-                    artist_name: 1,
-                    album_art: "$albums.album_art",
-                    album_name: "$albums.album_name",
-                    release_group_id: "$albums.release_group_id",
-                    tracks: {
-                        $map: {
-                            input: "$albums.tracks",
-                            as: "track",
-                            in: {
-                                track_number: "$$track.track_number",
-                                title: "$$track.title",
-                                recording_id: "$$track.recording_id",
-                                fileId: "$$track.fileId",
-                                fileSize: {$toLong: "$$track.fileSize"},
-                            },
-                        },
-                    },
-                },
+                $lookup: {
+                    from: "tracks",
+                    localField: "albumId",
+                    foreignField: "albumId",
+                    as: "tracks"
+                }
+            },
+            { $unwind: "$tracks" },
+            {
+                $sort: {
+                    discNumber: 1,
+                    trackNumber: 1
+                }
+            },
+            {
+                $group: {
+                    _id: "$_id",
+                    artistId: { $first: "$artistId" },
+                    albumId: { $first: "$albumId" },
+                    albumName: { $first: "$albumName" },
+                    year: { $first: "$year" },
+                    tracks: { $push: "$tracks" }
+                }
+            },
+            {
+                $project: { "tracks.albumName": 0 }
             }
-        ];
-        const album = await collections.music!.aggregate(query).toArray() as SongAlbum[];
-        if (album.length > 0) {
-            res.json(album[0]);
-        } else {
-            res.status(404).json({error: "Song not found"});
+        ]).toArray();
+
+
+        if (!album || album.length === 0) {
+            res.status(404).json({ error: "Album not found" });
+            return;
         }
+        res.json(album[0]);
     } catch (error) {
-        res.status(500).json({error: "Internal Server Error"});
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+albumRouter.get("/art/:albumId", async (req: Request, res: Response) => {
+    try {
+        const albumId = req.params.albumId;
+        let size = req.query.size;
+        if (!["small", "default", "large", "original"].includes(size as string)) {
+            res.redirect(`/api/v1/albums/art/${albumId}?size=default`);
+            return;
+        }
+
+        const album = await collections.albums!.aggregate([
+            { $match: { albumId: albumId } },
+            { $project: { _id: 0, albumArt: 1 } }
+        ]).toArray() as Album[];
+
+        if (!album || album.length === 0) {
+            res.status(404).json({ error: "Album not found" });
+            return;
+        }
+        const albumArt = album[0].albumArt;
+        if (!albumArt) {
+            res.status(404).json({ error: "Album art not found" });
+            return;
+        }
+
+        let imageBuffer = Buffer.from(albumArt, "base64");
+
+        if (size === "small") {
+            imageBuffer = await sharp(imageBuffer)
+                .resize({ width: 250, height: 250 })
+                .toBuffer();
+        } else if (size === "default") {
+            imageBuffer = await sharp(imageBuffer)
+                .resize({ width: 500, height: 500 })
+                .toBuffer();
+        } else if (size === "large") {
+            imageBuffer = await sharp(imageBuffer)
+                .resize({ width: 1000, height: 1000 })
+                .toBuffer();
+        }
+
+        res.writeHead(200, {
+            "Content-Type": "image/png",
+            "Content-Length": imageBuffer.length
+        });
+        res.end(imageBuffer);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
