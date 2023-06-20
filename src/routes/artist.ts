@@ -6,7 +6,11 @@ artistRouter.use(express.json());
 
 artistRouter.get("", async (req: Request, res: Response) => {
     try {
-        const artists = await collections.artists!.find({}).toArray();
+        const artists = await collections.artists!
+            .find({})
+            .collation({ locale: "en" })
+            .sort({ artistName: 1 })
+            .toArray();
         res.json(artists.sort((a, b) => a.artistName.localeCompare(b.artistName)));
     } catch (error) {
         res.status(500).json({ error: "Internal Server Error" });

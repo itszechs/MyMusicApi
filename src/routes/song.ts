@@ -20,6 +20,7 @@ songRouter.get("", async (req: Request, res: Response) => {
 
         const tracks = await collections.tracks!
             .find()
+            .collation({ locale: "en" })
             .sort({ trackName: 1 })
             .skip(skip)
             .limit(limit)
