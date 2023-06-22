@@ -1,6 +1,5 @@
 import express, { Request, Response, Router, } from "express";
 import { collections } from "../services/database";
-import { Album } from "../models/album";
 import sharp from "sharp";
 
 export const albumRouter = Router();
@@ -99,42 +98,45 @@ albumRouter.get("/art/:albumId", async (req: Request, res: Response) => {
             return;
         }
 
-        const album = await collections.albums!.aggregate([
-            { $match: { albumId: albumId } },
-            { $project: { _id: 0, albumArt: 1 } }
-        ]).toArray() as Album[];
-
-        if (!album || album.length === 0) {
-            res.status(404).json({ error: "Album not found" });
-            return;
-        }
-        const albumArt = album[0].albumArt;
-        if (!albumArt) {
+        const albumArt = await collections.images!.find({ albumId: albumId }).toArray();
+        if (!albumArt || albumArt.length === 0) {
             res.status(404).json({ error: "Album art not found" });
             return;
         }
+        const image = albumArt[0];
+        const imageBuffers: any[] = [];
 
-        let imageBuffer = Buffer.from(albumArt, "base64");
+        const readStream = collections.images!.openDownloadStream(image._id);
+        readStream.on("data", (chunk) => imageBuffers.push(chunk));
+        readStream.on("end", async () => {
+            let imageBuffer = Buffer.concat(imageBuffers);
 
-        if (size === "small") {
-            imageBuffer = await sharp(imageBuffer)
-                .resize({ width: 250, height: 250 })
-                .toBuffer();
-        } else if (size === "default") {
-            imageBuffer = await sharp(imageBuffer)
-                .resize({ width: 500, height: 500 })
-                .toBuffer();
-        } else if (size === "large") {
-            imageBuffer = await sharp(imageBuffer)
-                .resize({ width: 1000, height: 1000 })
-                .toBuffer();
-        }
+            if (size === "small") {
+                imageBuffer = await sharp(imageBuffer)
+                    .resize({ width: 250, height: 250 })
+                    .toBuffer();
+            } else if (size === "default") {
+                imageBuffer = await sharp(imageBuffer)
+                    .resize({ width: 500, height: 500 })
+                    .toBuffer();
+            } else if (size === "large") {
+                imageBuffer = await sharp(imageBuffer)
+                    .resize({ width: 1000, height: 1000 })
+                    .toBuffer();
+            }
 
-        res.writeHead(200, {
-            "Content-Type": "image/png",
-            "Content-Length": imageBuffer.length
+            res.writeHead(200, {
+                "Content-Type": "image/png",
+                "Content-Length": imageBuffer.length
+            });
+            res.end(imageBuffer);
+            return;
         });
-        res.end(imageBuffer);
+
+        readStream.on("error", (err) => {
+            console.log(err);
+            res.status(500).json({ error: "Internal Server Error" });
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Internal Server Error" });
