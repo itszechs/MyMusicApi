@@ -61,6 +61,36 @@ albumRouter.get("/:albumId", async (req: Request, res: Response) => {
     }
 });
 
+albumRouter.delete("/:albumId", async (req: Request, res: Response) => {
+    try {
+        const albumId = req.params.albumId;
+        const album = await collections.albums!.aggregate(
+            getAlbumQueryPipeline(albumId)
+        ).toArray();
+
+        if (!album || album.length === 0) {
+            res.status(404).json({ error: "Album not found" });
+            return;
+        }
+
+        const albumArt = await collections.images!.find({ albumId: albumId }).toArray();
+        if (albumArt && albumArt.length > 0) {
+            await collections.images!.delete(new ObjectId(albumArt[0]._id));
+        }
+        const deleteAlbum = await collections.albums!.deleteOne({
+            albumId: albumId
+        });
+        if (deleteAlbum.deletedCount === 0) {
+            res.status(500).json({ error: "Internal Server Error" });
+            return;
+        }
+        res.json({ message: "Album deleted" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
 albumRouter.get("/art/:albumId", async (req: Request, res: Response) => {
     try {
         const albumId = req.params.albumId;
