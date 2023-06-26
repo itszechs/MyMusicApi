@@ -1,6 +1,7 @@
 import express, { Request, Response, Router, } from "express";
 import { collections } from "../services/database";
 import sharp from "sharp";
+import { ObjectId } from "mongodb";
 
 export const albumRouter = Router();
 albumRouter.use(express.json());
@@ -45,38 +46,9 @@ albumRouter.get("", async (req: Request, res: Response) => {
 albumRouter.get("/:albumId", async (req: Request, res: Response) => {
     try {
         const albumId = req.params.albumId;
-        const album = await collections.albums!.aggregate([
-            { $match: { albumId: albumId } },
-            { $project: { albumArt: 0 } },
-            {
-                $lookup: {
-                    from: "tracks",
-                    localField: "albumId",
-                    foreignField: "albumId",
-                    as: "tracks"
-                }
-            },
-            { $unwind: "$tracks" },
-            {
-                $sort: {
-                    discNumber: 1,
-                    trackNumber: 1
-                }
-            },
-            {
-                $group: {
-                    _id: "$_id",
-                    artistId: { $first: "$artistId" },
-                    albumId: { $first: "$albumId" },
-                    albumName: { $first: "$albumName" },
-                    year: { $first: "$year" },
-                    tracks: { $push: "$tracks" }
-                }
-            },
-            {
-                $project: { "tracks.albumName": 0 }
-            }
-        ]).toArray();
+        const album = await collections.albums!.aggregate(
+            getAlbumQueryPipeline(albumId)
+        ).toArray();
 
         if (!album || album.length === 0) {
             res.status(404).json({ error: "Album not found" });
@@ -142,3 +114,43 @@ albumRouter.get("/art/:albumId", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
+export function getAlbumQueryPipeline(albumId: string) {
+    return [
+        { $match: { albumId: albumId } },
+        { $project: { albumArt: 0 } },
+        {
+            $lookup: {
+                from: "tracks",
+                localField: "albumId",
+                foreignField: "albumId",
+                as: "tracks"
+            }
+        },
+        { $unwind: { path: "$tracks", preserveNullAndEmptyArrays: true } },
+        {
+            $sort: {
+                discNumber: 1,
+                trackNumber: 1
+            }
+        },
+        {
+            $group: {
+                _id: "$_id",
+                artistId: { $first: "$artistId" },
+                albumId: { $first: "$albumId" },
+                albumName: { $first: "$albumName" },
+                year: { $first: "$year" },
+                tracks: { $push: "$tracks" }
+            }
+        },
+        { $project: { "tracks.albumName": 0 } },
+        {
+            $addFields: {
+                tracks: {
+                    $ifNull: ["$tracks", []]
+                }
+            }
+        }
+    ];
+}
