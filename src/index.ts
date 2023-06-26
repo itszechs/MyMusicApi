@@ -1,21 +1,21 @@
 import dotenv from 'dotenv'
 import express, { NextFunction, Request, Response } from "express";
-import { connectToDatabase } from "./services/database";
+import { collections, connectToDatabase } from "./services/database";
 import { artistRouter } from "./routes/artist";
 import { albumRouter } from "./routes/album";
-import { songRouter } from "./routes/song";
+import { songRouter } from './routes/song';
 
 // Load environment variables from the .env file, where the ATLAS_URI is configured
 dotenv.config();
 
-const { ATLAS_URI } = process.env;
+const { ATLAS_URI, CLOUDDB_URI } = process.env;
 
-if (!ATLAS_URI) {
-    console.error("No ATLAS_URI environment variable has been defined in config.env");
+if (!ATLAS_URI && !CLOUDDB_URI) {
+    console.error("Please define the ATLAS_URI and CLOUDDB_URI environment variables inside .env");
     process.exit(1);
 }
 
-connectToDatabase(ATLAS_URI)
+connectToDatabase(ATLAS_URI!, CLOUDDB_URI!)
     .then(() => {
         const app = express();
 
@@ -43,5 +43,4 @@ connectToDatabase(ATLAS_URI)
                 error: "Not Found",
             });
         });
-
     }).catch(error => console.error(error));
