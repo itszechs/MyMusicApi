@@ -1,5 +1,6 @@
 import { google, drive_v3 as driveV3 } from 'googleapis';
 import { Account } from '../models/account';
+import { collections } from './database';
 
 export class GoogleDrive {
 
@@ -68,4 +69,36 @@ export class GoogleDrive {
     }
   }
 
+}
+
+export async function findAndDelete(fileId: string) {
+  const accounts = collections.accounts!;
+  const queryDrive = new GoogleDrive(accounts[0]);
+  const file = await queryDrive.get(fileId);
+
+  if (file.owners && file.owners.length) {
+    const owner = file.owners[0].emailAddress;
+    const ownerAccount = accounts.find((account) => account.email === owner);
+
+    if (ownerAccount) {
+      const drive = new GoogleDrive(ownerAccount);
+      console.log(`Deleting file  ${file.name} (${fileId}) from ${owner}...`);
+      await drive.delete(fileId, false);
+
+      const parentFolderId = file.parents && file.parents.length ? file.parents[0] : null;
+      if (parentFolderId) {
+        const parentFolder = await drive.list(`'${parentFolderId}' in parents and trashed = false`);
+
+        if (parentFolder.length === 0) {
+          console.log(`Parent folder (${parentFolderId}) is empty! Deleting...`);
+          await drive.delete(parentFolderId, false);
+        } else {
+          console.log(`Parent folder ${parentFolderId} not empty!`);
+        }
+      }
+    } else {
+      console.error(`Owner account ${owner} not found!`);
+    }
+  }
+  return false
 }
